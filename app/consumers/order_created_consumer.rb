@@ -14,13 +14,23 @@ class OrderCreatedConsumer
 
   def run
     conn = Bunny.new(@rabbitmq_url)
-    conn.start
 
-    ch = conn.create_channel
-    ch.prefetch(10)
+    tries = 0
+    begin
+      conn.start
+    rescue Bunny::TCPConnectionFailed, Errno::ECONNREFUSED => e
+      tries += 1
+      Rails.logger.warn("[consumer] rabbit not ready (#{e.class}): retry #{tries}/60")
+      raise if tries >= 60
+      sleep 2
+      retry
+    end
 
-    exchange = ch.direct(EXCHANGE, durable: true)
-    queue = ch.queue(QUEUE_NAME, durable: true)
+    channel = conn.create_channel
+    channel.prefetch(10)
+
+    exchange = channel.direct(EXCHANGE, durable: true)
+    queue = channel.queue(QUEUE_NAME, durable: true)
     queue.bind(exchange, routing_key: ROUTING_KEY)
 
     Rails.logger.info("[consumer] listening queue=#{QUEUE_NAME} exchange=#{EXCHANGE} rk=#{ROUTING_KEY}")
@@ -29,19 +39,19 @@ class OrderCreatedConsumer
       begin
         payload = JSON.parse(body)
         Customers::OnOrderCreated.call(payload)
-        ch.ack(delivery_info.delivery_tag)
+        channel.ack(delivery_info.delivery_tag)
       rescue Customers::OnOrderCreated::InvalidPayload => e
         Rails.logger.error("[consumer] invalid payload: #{e.message} body=#{body}")
-        ch.reject(delivery_info.delivery_tag, false) # no requeue
+        channel.reject(delivery_info.delivery_tag, false) # no requeue
       rescue Customers::OnOrderCreated::CustomerNotFound => e
         Rails.logger.error("[consumer] customer not found: #{e.message}")
-        ch.reject(delivery_info.delivery_tag, false)
+        channel.reject(delivery_info.delivery_tag, false)
       rescue JSON::ParserError => e
         Rails.logger.error("[consumer] invalid JSON: #{e.message} body=#{body}")
-        ch.reject(delivery_info.delivery_tag, false)
+        channel.reject(delivery_info.delivery_tag, false)
       rescue => e
         Rails.logger.error("[consumer] unexpected error: #{e.class} #{e.message}")
-        ch.nack(delivery_info.delivery_tag, false, true) # requeue
+        channel.nack(delivery_info.delivery_tag, false, true) # requeue
       end
     end
   ensure
