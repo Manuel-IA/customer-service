@@ -1,0 +1,56 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  customer-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: customer_development
+    ports:
+      - "5433:5432"
+    volumes:
+      - customer_db_data:/var/lib/postgresql/data
+
+  customer-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@customer-db:5432/customer_development
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      - customer-db
+      - rabbitmq
+    ports:
+      - "3001:3000"
+    command: >
+      bash -lc "bundle exec rails db:prepare &&
+               bundle exec rails db:seed &&
+               bundle exec rails s -b 0.0.0.0 -p 3000"
+
+  customer-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      RAILS_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@customer-db:5432/customer_development
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      - customer-db
+      - rabbitmq
+    command: >
+      bash -lc "bundle exec rails db:prepare &&
+               bundle exec ruby bin/consume_orders"
+
+volumes:
+  customer_db_data:
+  rabbitmq_data:
