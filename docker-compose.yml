@@ -47,9 +47,14 @@ services:
     depends_on:
       - customer-db
       - rabbitmq
+    restart: unless-stopped
     command: >
       bash -lc "bundle exec rails db:prepare &&
-               bundle exec ruby bin/consume_orders"
+             until (echo > /dev/tcp/rabbitmq/5672) >/dev/null 2>&1; do
+               echo 'waiting for rabbitmq...';
+               sleep 2;
+             done;
+             bundle exec ruby bin/consume_orders"
 
 volumes:
   customer_db_data:

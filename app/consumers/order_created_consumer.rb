@@ -14,7 +14,17 @@ class OrderCreatedConsumer
 
   def run
     conn = Bunny.new(@rabbitmq_url)
-    conn.start
+
+    tries = 0
+    begin
+      conn.start
+    rescue Bunny::TCPConnectionFailed, Errno::ECONNREFUSED => e
+      tries += 1
+      Rails.logger.warn("[consumer] rabbit not ready (#{e.class}): retry #{tries}/60")
+      raise if tries >= 60
+      sleep 2
+      retry
+    end
 
     ch = conn.create_channel
     ch.prefetch(10)
