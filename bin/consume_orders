@@ -1,0 +1,6 @@
+#!/usr/bin/env ruby
+ENV["RAILS_ENV"] ||= ENV.fetch("RAILS_ENV", "development")
+
+require_relative "../config/environment"
+
+OrderCreatedConsumer.new.run
