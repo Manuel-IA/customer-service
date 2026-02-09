@@ -1,11 +1,23 @@
 services:
   rabbitmq:
     image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: app
+      RABBITMQ_DEFAULT_PASS: app
     ports:
       - "5672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      monokera-shared:
+        aliases:
+          - rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   customer-db:
     image: postgres:16
@@ -17,6 +29,13 @@ services:
       - "5433:5432"
     volumes:
       - customer_db_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d customer_development"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
   customer-web:
     build:
@@ -25,15 +44,21 @@ services:
     environment:
       RAILS_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@customer-db:5432/customer_development
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672
     depends_on:
-      - customer-db
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      customer-db:
+        condition: service_healthy
     ports:
       - "3001:3000"
+    networks:
+      default: {}
+      monokera-shared:
+        aliases:
+          - customer-web
     command: >
       bash -lc "bundle exec rails db:prepare &&
-               bundle exec rails db:seed &&
                bundle exec rails s -b 0.0.0.0 -p 3000"
 
   customer-consumer:
@@ -43,18 +68,23 @@ services:
     environment:
       RAILS_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@customer-db:5432/customer_development
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      RABBITMQ_URL: amqp://app:app@rabbitmq:5672
     depends_on:
-      - customer-db
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      customer-db:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - default
+      - monokera-shared
     command: >
       bash -lc "bundle exec rails db:prepare &&
-             until (echo > /dev/tcp/rabbitmq/5672) >/dev/null 2>&1; do
-               echo 'waiting for rabbitmq...';
-               sleep 2;
-             done;
-             bundle exec ruby bin/consume_orders"
+               bundle exec ruby bin/consume_orders"
+
+networks:
+  monokera-shared:
+    external: true
 
 volumes:
   customer_db_data:
