@@ -17,6 +17,7 @@ RSpec.describe Customers::OnOrderCreated do
 
     described_class.call(payload)
     expect(customer.reload.orders_count).to eq(1)
+    expect(ProcessedEvent.count).to eq(1)
   end
 
   it "raises InvalidPayload when missing event_id" do

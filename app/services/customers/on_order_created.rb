@@ -24,7 +24,16 @@ module Customers
       raise InvalidPayload, "missing order.customer_id" if customer_id.nil?
 
       # Idempotence when the event has already been processed
-      ProcessedEvent.create!(event_id: event_id, event_type: event_type, payload: @payload)
+      created = false
+      ProcessedEvent.transaction do
+        pe = ProcessedEvent.find_or_create_by!(event_id: event_id) do |r|
+          r.event_type = event_type
+          r.payload = @payload
+          created = true
+        end
+
+        return true unless created
+      end
 
       customer = Customer.find_by(id: customer_id)
       raise CustomerNotFound, "customer_id=#{customer_id} not found" unless customer
