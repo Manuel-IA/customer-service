@@ -59,7 +59,8 @@ services:
           - customer-web
     command: >
       bash -lc "bundle exec rails db:prepare &&
-               bundle exec rails s -b 0.0.0.0 -p 3000"
+                bundle exec rails db:seed &&
+                bundle exec rails s -b 0.0.0.0 -p 3000"
 
   customer-consumer:
     build:
@@ -80,7 +81,7 @@ services:
       - monokera-shared
     command: >
       bash -lc "bundle exec rails db:prepare &&
-               bundle exec ruby bin/consume_orders"
+              bundle exec ruby bin/consume_orders"
 
 networks:
   monokera-shared:

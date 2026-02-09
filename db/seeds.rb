@@ -1,8 +1,8 @@
-Customer.delete_all
+# frozen_string_literal: true
 
-# PostgreSQL reset so that the IDs start again at 1
-if ActiveRecord::Base.connection.adapter_name.downcase.include?("postgres")
-  ActiveRecord::Base.connection.reset_pk_sequence!("customers")
+if Customer.exists?
+  puts "Customers already exist. Skipping."
+  return
 end
 
 customers = [
