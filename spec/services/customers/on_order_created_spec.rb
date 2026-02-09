@@ -30,4 +30,22 @@ RSpec.describe Customers::OnOrderCreated do
 
     expect { described_class.call(payload) }.to raise_error(Customers::OnOrderCreated::InvalidPayload)
   end
+
+  it "creates a ProcessedEvent record for the event_id" do
+    customer = create(:customer, orders_count: 0)
+
+    payload = {
+      "event_id" => "evt-999",
+      "event_type" => "order.created",
+      "order" => { "id" => 10, "customer_id" => customer.id }
+    }
+
+    expect {
+      described_class.call(payload)
+    }.to change(ProcessedEvent, :count).by(1)
+
+    pe = ProcessedEvent.last
+    expect(pe.event_id).to eq("evt-999")
+    expect(pe.event_type).to eq("order.created")
+  end
 end
